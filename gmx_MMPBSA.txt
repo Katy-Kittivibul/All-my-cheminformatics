@@ -1,0 +1,31 @@
+<<MMPBSA calculation>>
+
+gmx_MMPBSA -O -i mmpbsa.in -cs md_100.tpr -ci index.ndx -cg 20 21 -ct md_100.xtc (-lm .mol2 for protein-ligand) (-cr .pdb)
+- need to create new .ndx file without any ions included if there is an error with the COM.prmtop file (no data)
+- -cg (protein) (ligand)
+
+# PBC problem
+- COM.prmtop, REC.prmtop was empty.
+Create new .ndx file without any ions included!!!
+
+- Sometimes you will see the failure notification like this;
+"ValueError: could not convert string to float: '*************'
+Exiting. All files have been retained."
+This problem was related to PBC conditions. 
+> gmx_mpi trjconv -f md_2mt_100.xtc -s md_2mt_100.tpr -n index.ndx -pbc mol -center -ur compact -o no_pbc.xtc
+> gmx_mpi trjconv -f no_pbc.xtc -s md_2mt_100.tpr -n index.ndx -fit rot+trans -o fit_md.xtc
+> gmx_MMPBSA -O -i mmpbsa.in -cs md_2mt_100.tpr -ci test_index.ndx -cg 20 21 -ct fit_md.xtc
+
+# Create mol2 file
+> antechamber -i .pdb -fi pdb -o ligand.mol2 -fo mol2 -c bcc -at gaff [or other parameters that was used for ligand preparation step.]
+
+# Update 1.5 problem 
+- program freezes during this step "Cleaning normal complex trajectories..." and the file size of "COM_traj_0.xtc" stuck at around 709 mb.
+> python -m pip install git+https://github.com/Valdes-Tresanco-MS/gmx_MMPBSA -U
+or
+> python -m pip install gmx_MMPBSA -U (if you installed with conda environment (pip))
+or
+> amber.python -m pip install gmx_MMPBSA -U (if you installed with AmberTools compilation)
+
+**note that gmx_MMPBSA is not compatible with previous versions.
+However, modifying the _GMXMMPBSA_info file could open the results in gmx_MMPBSA_ana. 
