@@ -1,0 +1,103 @@
+#ligand preparation
+$ antechamber -fi pdb -fo prepi -i .pdb -o .prep -c bcc -at gaff		#antechamber -i 4I5.pdb -fi pdb -o 4I5.prep -fo prepi -c bcc -s 2
+$ parmchk2 -i .prep -o .frcmod -f prepi -s gaff					#parmchk2 -i 4I5.prep -o 4I5.frcmod -f prepi -s gaff
+$ tleap
+> source leaprc.gaff
+> loadamberprep .prep
+> loadamberparams .frcmod
+> mol = loadpdb NEWPDB.PDB
+> saveamberparm mol .prmtop .inpcrd
+> quit
+
+Protein preparation
+#add glycine residue at N- and C- terminal 
+#clean up PDB and add remove hydrogen atom
+
+pdb4amber -i .pdb > protein_clean.pdb
+cp protein_clean.pdb 7bqy_N3.pdb
+#merge protein+6EZ into 5IX0_6EZ.pdb
+**look at TER in both of amino acids and cofacter > delete all letters next to TER**
+
+#create file 5IX0_6EZ.in and edit file frcmod.ionsjc_tip3p by adding CA2+ and ZN2+
+
+tleap
+source leaprc.protein.ff14SB
+source leaprc.water.tip3p
+source leaprc.gaff
+loadamberprep ./N3.prep
+loadamberparams ./N3.frcmod
+loadamberparams frcmod.ionsjc_tip3p
+mol = loadpdb 7bqy_N3.pdb
+solvatebox mol TIP3PBOX 10.0
+charge mol	; To check the system charge
+addions2 mol NA 0
+savepdb mol 7bqy_N3_solv.pdb
+saveamberparm mol 7bqy_N3_solv.prmtop 7bqy_N3_solv.inpcrd
+quit
+
+
+$ python 
+>>> import parmed as pmd
+>>> amber = pmd.load_file('7bqy_N3_solv.prmtop',xyz='7bqy_N3_solv.inpcrd')
+>>> amber.save('7bqy_N3_solv_GMX.top')
+>>> amber.save('7bqy_N3_solv_GMX.gro')
+>>> quit()
+
+
+gmx_mpi grompp -f em_real.mdp -c 7bqy_N3_solv_GMX.gro -p 7bqy_N3_solv_GMX.top -o em.tpr
+gmx_mpi mdrun -v -deffnm em
+
+gmx_mpi make_ndx -f em.gro
+#protein_ligand: 
+>1|15 
+>q
+
+gmx_mpi grompp -f nvt.mdp -c em.gro -p 7bqy_N3_solv_GMX.top -n index.ndx -o nvt.tpr -maxwarn 1
+gmx_mpi mdrun -v -deffnm nvt -gpu_id 0
+
+gmx_mpi grompp -f npt.mdp -c nvt.gro -t nvt.cpt -p 7bqy_N3_solv_GMX.top -n index.ndx -o npt.tpr -maxwarn 1
+gmx_mpi mdrun -v -deffnm npt -gpu_id 0
+
+gmx_mpi grompp -f md.mdp -c npt.gro -t npt.cpt -p 7bqy_N3_solv_GMX.top -n index.ndx -o md_N3_100.tpr
+nohup gmx_mpi mdrun -v -deffnm md_N3_100 -gpu_id 0 &
+htop > to check the mdrun production
+tail .log -f
+
+PBC problem
+gmx_mpi trjconv -f .xtc -s .tpr -n index.ndx -pbc nojump -center -ur compact -o .xtc
+select group: protein_ligand
+select output: system
+
+gmx make_ndx -f .gro -o .ndx
+> l (to list all residues)
+> h (for help)
+> 1 & ri 1 - 301 (Mpro chain A)
+> 1 & ri 302 - 602 (Mpro chain B)
+>q
+
+##for RBD-ACE2
+> l
+> 1 & ri 1 - 599 (for ACE2)
+> 1 & ri 600 - 793 (for RBD)
+> 4 & ri 1 - 599 
+> 4 & ri 600 - 793
+
+Analysis
+gmx_mpi rms -f .xtc -s .tpr -o rmsd.xvg -b 0 -e 100000 (backbone)
+gmx_mpi rmsf -f .xtc -s .tpr -o rmsf.xvg -oq .pdb -res -b 0 -e 100000 (protein)
+gmx_mpi trjconv -f .xtc -s .tpr -o .pdb -pbc mol -sep -ur compact -b 0 -e 100000 -dt 10000 (non water)
+gmx_mpi cluster -f .xtc -s .tpr method gromos -cl cluster.pdb -g cluster.log -cutoff 0.15 -b 0 -e 100000 -dt 2000
+gmx_mpi hband -f .xtc -s .tpr num hbnum_protein_ligand.xvg
+> protein
+> ligand
+
+MMPBSA
+make_ndx_mpi -f .gro -o protein_ligand.ndx
+g_mmpbsa -f .xtc -s .tpr -n mm_pbsa.ndx -pdie 2 -decomp -mmcon contrib_MM.dat -b 80000 -e 100000 -dt 100
+g_mmpbsa -f .xtc -s .tpr -n mm_pbsa.ndx -i polar.mdp -nomme -pbsa -decomp -pol polar.xvg -pcon contrib_pol.dat -b 80000 -e 100000 -dt 100
+select: protein
+select: ligand
+g_mmpbsa -f .xtc -s .tpr -n mm_pbsa.ndx -i apolar.mdp -nomme -pbsa -decomp -apol apolar.xvg -apcon contrib_apol.dat -b 80000 -e 100000 -dt 100
+
+python MmPbSaStat.py -m energy_MM.xvg -p polar.xvg -a apolar.xvg
+python MmPbSaDecomp.py -bs -nbs 500 -m contrib_MM.dat -p contrib_pol.dat -a contrib_apol.dat
