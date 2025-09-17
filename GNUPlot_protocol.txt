@@ -1,0 +1,33 @@
+[RMSF]
+> set encoding iso_8859_1
+> set term postscript enhanced color font "Arial,24"
+> set output “data.png” 
+> set terminal png size 1000,2000
+> set title 'Root-mean-square Fluctuation (RMSF)'
+> set xlabel 'Residues'
+> set ylabel 'RMSF({\305})'
+> set xrange [1:301]
+
+
+
+
+
+set xlabel "Time (ns)"
+set ylabel "RMSD ({\305})"
+set key left bottom Left reverse
+#set yrange [1.5:4]
+
+set output "rmsds.eps";
+plot "WT-system/WT_protein_system_total_bb_rms.dat" u ($1/500):($2) w lines s bezier t "Wild Type" lw 4, \
+"MUT-A-system/MUT_A_system_total_bb_rms.dat" u ($1/500):($2) w lines s bezier t "Mutation A" lw 4, \
+"MUT-B-system/MUT_B_system_RNA_total_bb_rms.dat" u ($1/500):($2) w lines s bezier t "Mutation B" lw 4, \
+"MUT-C-system/MUT_C_system_total_bb_rms.dat" u ($1/500):($2) w lines s bezier t "Mutation C" lw 4;
+
+set xlabel "Time (ns)"
+set ylabel "Number of hydrogen bonds"
+
+set output "hbonds.eps";
+plot "WT-system/WT_protein_system_hbond.dat" u ($1/500):($2) w lines s bezier t "Wild Type" lw 4, \
+"MUT-A-system/MUT_A_system_hbond.dat" u ($1/500):($2) w lines s bezier t "Mutation A" lw 4, \
+"MUT-B-system/MUT_B_system_hbond.dat" u ($1/500):($2) w lines s bezier t "Mutation B" lw 4, \
+"MUT-C-system/MUT_C_system_hbond.dat" u ($1/500):($2) w lines s bezier t "Mutation C" lw 4;
